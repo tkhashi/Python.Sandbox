@@ -1,16 +1,14 @@
 import os
+
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import BaseMessage, HumanMessage
 from langchain.agents import AgentType, initialize_agent, load_tools
 from langchain.callbacks import StreamlitCallbackHandler
-
-from typing import List
+from langchain.chat_models import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import MessagesPlaceholder
 
 load_dotenv()
-
-st.title("langchain!")
 
 def create_agent_chain():
     chat=ChatOpenAI(
@@ -18,12 +16,25 @@ def create_agent_chain():
         temperature=0.5,
         streaming=True,
     )
+    agent_kwargs={
+            "extra_prompt_messages": [MessagesPlaceholder(variable_name="memory")],
+    }
+
+    memory=ConversationBufferMemory(memory_key="memory", return_messages=True)
+
     tools=load_tools(["ddg-search", "wikipedia"])
     return initialize_agent(
         llm=chat,
         tools=tools,
-        agent=AgentType.OPENAI_MULTI_FUNCTIONS
+        agent=AgentType.OPENAI_MULTI_FUNCTIONS,
+        agent_kwargs=agent_kwargs,
+        memory=memory,
     )
+
+if "agent_chain" not in st.session_state:
+    st.session_state.agent_chain = create_agent_chain()
+
+st.title("langchain!")
 
 
 if "messages" not in st.session_state:
@@ -43,8 +54,7 @@ if prompt:
 
     with st.chat_message("assistant"):
         callback = StreamlitCallbackHandler(st.container())
-        agent_chain=create_agent_chain()
-        response=agent_chain.run(prompt, callbacks=[callback])
+        response=st.session_state.agent_chain.run(prompt, callbacks=[callback])
         st.markdown(response)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
